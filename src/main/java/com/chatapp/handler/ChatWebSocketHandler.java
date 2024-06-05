@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.socket.WebSocketHandler;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
@@ -21,9 +22,16 @@ public class ChatWebSocketHandler implements WebSocketHandler {
     private final Sinks.Many<Event> chatHistory = Sinks.many().replay().limit(1000);
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Override
     public Mono<Void> handle(WebSocketSession session) {
         AtomicReference<Event> lastReceivedEvent = new AtomicReference<>();
-        return session.receive()
+
+        Flux<WebSocketMessage> outputMessages = chatHistory.asFlux()
+                .map(this::toString)
+                .map(session::textMessage)
+                .doOnComplete(() -> log.info("Sending completed!"));
+
+        Mono<Void> inputMessages = session.receive()
                 .map(WebSocketMessage::getPayloadAsText)
                 .map(this::toEvent)
                 .doOnNext(event -> {
@@ -31,16 +39,15 @@ public class ChatWebSocketHandler implements WebSocketHandler {
                     chatHistory.tryEmitNext(event);
                 })
                 .doOnComplete(() -> {
-                    if(lastReceivedEvent.get() != null) {
+                    if (lastReceivedEvent.get() != null) {
                         lastReceivedEvent.get().setType(EventType.LEAVE);
                         chatHistory.tryEmitNext(lastReceivedEvent.get());
                     }
                     log.info("Completed!");
                 })
-                .zipWith(session.send(chatHistory.asFlux()
-                        .map(this::toString)
-                        .map(session::textMessage)))
                 .then();
+
+        return session.send(outputMessages).and(inputMessages);
     }
 
     @SneakyThrows

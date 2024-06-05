@@ -33,7 +33,6 @@ const connect = (event) => {
     socket = new WebSocket("ws://localhost:8080/chat");
 
     socket.onopen = () => {
-      //loadHistory();
       socket.send(JSON.stringify({ sender: username, type: "JOIN" }));
       connectingElement.classList.add("hidden");
     };
@@ -126,6 +125,7 @@ const getHash = (messageSender) => {
   }
   return hash;
 };
+
 const getAvatarColor = (hash) => {
   const index = Math.abs(hash % colors.length);
   return colors[index];
