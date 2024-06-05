@@ -1,0 +1,4 @@
+
+chat:
+  history:
+    capacity: 3
